@@ -12,7 +12,7 @@ library(pROC)
 set.seed(42)
 n <- 2000
 
-# 模拟四个核心预测变量及结局 (脱敏演示数据)
+# Simulate the four core preoperative predictors and outcome
 model_data <- data.frame(
   age = rnorm(n, 60, 12),
   alb_cr_ratio = runif(n, 1, 15),
@@ -20,13 +20,13 @@ model_data <- data.frame(
   glucose = rnorm(n, 6.5, 2.0)
 )
 
-# 模拟 AKI 结局 (依赖于这四个变量)
+# Simulate AKI outcome based on the four features
 model_data$aki <- rbinom(n, 1, plogis(
   -4 - 0.4 * model_data$alb_cr_ratio + 0.05 * model_data$age - 
   0.6 * model_data$sex_female + 0.15 * model_data$glucose
 ))
 
-# ---- 3. Train/Test Split (70/30) ----
+# ---- 3. Train/Test Split (Strictly 70/30 as in Manuscript) ----
 set.seed(123)
 train_idx <- sample(1:nrow(model_data), 0.7 * nrow(model_data))
 train_data <- model_data[train_idx, ]
@@ -39,15 +39,16 @@ y_train <- train_data$aki
 X_test <- as.matrix(test_data[, features])
 y_test <- test_data$aki
 
-# ---- 4. LightGBM Training ----
+# ---- 4. LightGBM Training (Parameters as described in Manuscript) ----
+# Manuscript parameters: max_depth=3, learning_rate=0.03, feature_fraction=0.7, 
+# L1 lambda=2, L2 lambda=5, min_data_in_leaf=50
 lgb_params <- list(
   objective = "binary",
   metric = "auc",
-  num_leaves = 8,
   max_depth = 3,
   learning_rate = 0.03,
   feature_fraction = 0.7,
-  bagging_fraction = 0.7,
+  bagging_fraction = 0.7,   # Standard bagging for robustness
   bagging_freq = 1,
   lambda_l1 = 2,
   lambda_l2 = 5,
@@ -62,11 +63,11 @@ lgb_model <- lgb.train(
   nrounds = 200
 )
 
-# ---- 5. Evaluation ----
+# ---- 5. Evaluation (Internal Validation Set) ----
 pred_prob <- predict(lgb_model, X_test)
 roc_obj <- roc(y_test, pred_prob, quiet = TRUE)
 auc_val <- as.numeric(auc(roc_obj))
-cat(sprintf("\nTest AUC: %.4f\n", auc_val))
+cat(sprintf("\nInternal Validation Test AUC: %.4f\n", auc_val))
 
 # ---- 6. Feature Importance ----
 importance <- lgb.importance(lgb_model, percentage = TRUE)
